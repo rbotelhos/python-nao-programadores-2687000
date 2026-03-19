@@ -10,6 +10,8 @@ em banco SQLite e notificando por console e/ou e-mail.
 Uso:
     python main.py                  # inicia agendamento diário
     python main.py --agora          # executa uma vez imediatamente
+    python main.py --web            # inicia interface web (http://localhost:5000)
+    python main.py --demo           # popula banco com dados de demonstração
     python main.py --listar         # lista consultas salvas no banco
     python main.py --stats          # exibe estatísticas do banco
     python main.py --sem-detalhes   # roda sem buscar páginas individuais
@@ -55,6 +57,16 @@ def parse_args() -> argparse.Namespace:
         help="Executa o ciclo completo uma única vez e encerra.",
     )
     grupo.add_argument(
+        "--web",
+        action="store_true",
+        help="Inicia a interface web (padrão: http://localhost:5000).",
+    )
+    grupo.add_argument(
+        "--demo",
+        action="store_true",
+        help="Popula o banco com dados de demonstração e inicia a interface web.",
+    )
+    grupo.add_argument(
         "--listar",
         action="store_true",
         help="Lista as consultas salvas no banco e encerra.",
@@ -73,6 +85,17 @@ def parse_args() -> argparse.Namespace:
         "--tipo",
         choices=["cp", "ts"],
         help="Filtra listagem: 'cp' = Consulta Pública, 'ts' = Tomada de Subsídio.",
+    )
+    parser.add_argument(
+        "--porta",
+        type=int,
+        default=5000,
+        help="Porta da interface web (padrão: 5000).",
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host da interface web (padrão: 127.0.0.1).",
     )
     return parser.parse_args()
 
@@ -120,6 +143,13 @@ def _exibir_stats() -> None:
     print(f"  Notificações pendentes     : {stats['notificacoes_pendentes']}")
 
 
+def _iniciar_web(host: str, porta: int, debug: bool = False) -> None:
+    from anatel_monitor.web.app import criar_app
+    flask_app = criar_app(debug=debug)
+    logger.info("Interface web em http://%s:%d", host, porta)
+    flask_app.run(host=host, port=porta, debug=debug)
+
+
 # ---------------------------------------------------------------------------
 # Ponto de entrada
 # ---------------------------------------------------------------------------
@@ -128,7 +158,15 @@ def main() -> None:
     args = parse_args()
     enriquecer = not args.sem_detalhes
 
-    if args.listar:
+    if args.demo:
+        from anatel_monitor.demo_data import popular_demo
+        popular_demo()
+        _iniciar_web(args.host, args.porta)
+
+    elif args.web:
+        _iniciar_web(args.host, args.porta)
+
+    elif args.listar:
         _exibir_listagem(args.tipo)
 
     elif args.stats:

@@ -244,6 +244,87 @@ def listar_consultas(
         return [dict(r) for r in rows]
 
 
+def listar_para_web(
+    q: str = "",
+    tipo: Optional[str] = None,
+    status: Optional[str] = None,
+    ano: Optional[int] = None,
+) -> list[dict]:
+    """
+    Consultas enriquecidas para a interface web.
+
+    Retorna campos extras calculados:
+      - ano_abertura, ano_encerramento
+      - dias_restantes  (None se encerrada ou sem data)
+      - urgente         (True se encerra em até 15 dias)
+    """
+    query = "SELECT * FROM consultas WHERE 1=1"
+    params: list = []
+
+    if tipo:
+        query += " AND tipo = ?"
+        params.append(tipo)
+    if status:
+        query += " AND status = ?"
+        params.append(status)
+    if q:
+        query += " AND (titulo LIKE ? OR objeto LIKE ? OR numero LIKE ?)"
+        like = f"%{q}%"
+        params.extend([like, like, like])
+    if ano:
+        # filtra por ano de abertura OU encerramento
+        query += (
+            " AND (strftime('%Y', data_abertura) = ?"
+            " OR strftime('%Y', data_encerramento) = ?)"
+        )
+        params.extend([str(ano), str(ano)])
+
+    query += " ORDER BY COALESCE(data_abertura, data_descoberta) DESC"
+
+    hoje = datetime.now().date()
+
+    with get_connection() as conn:
+        rows = conn.execute(query, params).fetchall()
+        resultado = []
+        for r in rows:
+            d = dict(r)
+
+            # Calcula ano de abertura/encerramento
+            d["ano_abertura"] = (d["data_abertura"] or "")[:4] or None
+            d["ano_encerramento"] = (d["data_encerramento"] or "")[:4] or None
+
+            # Calcula dias restantes
+            prazo_str = d.get("prazo_resposta") or d.get("data_encerramento")
+            dias = None
+            urgente = False
+            if prazo_str and d["status"] == "Aberta":
+                try:
+                    from datetime import date
+                    prazo = date.fromisoformat(prazo_str[:10])
+                    dias = (prazo - hoje).days
+                    urgente = 0 <= dias <= 15
+                except ValueError:
+                    pass
+            d["dias_restantes"] = dias
+            d["urgente"] = urgente
+            resultado.append(d)
+        return resultado
+
+
+def anos_com_consultas() -> list[int]:
+    """Retorna lista de anos (desc) que possuem consultas."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT CAST(strftime('%Y', COALESCE(data_abertura, data_descoberta)) AS INTEGER) AS ano
+            FROM consultas
+            WHERE ano IS NOT NULL
+            ORDER BY ano DESC
+            """
+        ).fetchall()
+        return [r[0] for r in rows if r[0]]
+
+
 def buscar_consulta(codigo: str) -> Optional[dict]:
     """Busca uma consulta pelo código."""
     with get_connection() as conn:

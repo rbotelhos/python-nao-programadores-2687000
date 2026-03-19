@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anatel — Participação Social</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>"/>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════ HEADER ═══════════════════════ -->
+<header class="site-header">
+  <div class="container header-inner">
+    <div class="header-brand">
+      <span class="header-icon">📡</span>
+      <div>
+        <h1 class="header-title">Anatel</h1>
+        <p class="header-subtitle">Monitor de Participação Social</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span class="last-update" id="lastUpdate">
+        Atualizado: {{ stats.get('data_atualizacao', 'N/D') if stats else '—' }}
+      </span>
+      <a href="/exportar.csv" class="btn btn-outline btn-sm" id="exportBtn" title="Exportar CSV">
+        ⬇ CSV
+      </a>
+      <button class="btn btn-icon" id="themeToggle" title="Alternar tema" aria-label="Alternar tema claro/escuro">
+        <span id="themeIcon">🌙</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- ═══════════════════════ HERO STATS ═══════════════════ -->
+<section class="stats-section">
+  <div class="container">
+    <div class="stats-grid">
+
+      <div class="stat-card stat-open">
+        <div class="stat-icon">🟢</div>
+        <div class="stat-body">
+          <span class="stat-value">{{ stats.abertas }}</span>
+          <span class="stat-label">Abertas</span>
+          <span class="stat-sub">{{ ano_atual }} + {{ ano_anterior }}</span>
+        </div>
+      </div>
+
+      <div class="stat-card stat-closed">
+        <div class="stat-icon">📁</div>
+        <div class="stat-body">
+          <span class="stat-value">{{ stats.encerradas }}</span>
+          <span class="stat-label">Encerradas</span>
+          <span class="stat-sub">histórico total</span>
+        </div>
+      </div>
+
+      <div class="stat-card stat-urgent">
+        <div class="stat-icon">⏳</div>
+        <div class="stat-body">
+          <span class="stat-value">{{ urgentes|length }}</span>
+          <span class="stat-label">Urgentes</span>
+          <span class="stat-sub">encerram em ≤ 15 dias</span>
+        </div>
+      </div>
+
+      <div class="stat-card stat-cp">
+        <div class="stat-icon">📋</div>
+        <div class="stat-body">
+          <span class="stat-value">{{ stats.consultas_publicas }}</span>
+          <span class="stat-label">Consultas Públicas</span>
+          <span class="stat-sub">total histórico</span>
+        </div>
+      </div>
+
+      <div class="stat-card stat-ts">
+        <div class="stat-icon">📝</div>
+        <div class="stat-body">
+          <span class="stat-value">{{ stats.tomadas_subsidio }}</span>
+          <span class="stat-label">Tomadas de Subsídio</span>
+          <span class="stat-sub">total histórico</span>
+        </div>
+      </div>
+
+      <div class="stat-card stat-postponed">
+        <div class="stat-icon">🔄</div>
+        <div class="stat-body">
+          <span class="stat-value">{{ stats.adiadas }}</span>
+          <span class="stat-label">Com Prazo Adiado</span>
+          <span class="stat-sub">prorrogadas</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ URGENTES ═════════════════════ -->
+{% if urgentes %}
+<section class="section-urgentes">
+  <div class="container">
+    <div class="section-header urgent-header">
+      <span class="pulse-dot"></span>
+      <h2>⚠ Encerrando em Breve</h2>
+      <span class="badge badge-urgent">{{ urgentes|length }}</span>
+    </div>
+    <div class="cards-grid">
+      {% for c in urgentes %}
+        {{ card(c, highlight=True) }}
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endif %}
+
+<!-- ═══════════════════════ BUSCA & FILTROS ══════════════ -->
+<section class="filter-section sticky-filters" id="filters">
+  <div class="container">
+    <div class="filter-bar">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input
+          type="search"
+          id="searchInput"
+          class="search-input"
+          placeholder="Buscar por título, número ou objeto..."
+          autocomplete="off"
+        />
+        <button class="search-clear" id="clearSearch" hidden>✕</button>
+      </div>
+
+      <div class="filter-chips">
+        <span class="filter-label">Tipo:</span>
+        <button class="chip chip-active" data-filter="tipo" data-value="">Todos</button>
+        <button class="chip" data-filter="tipo" data-value="Consulta Pública">CP</button>
+        <button class="chip" data-filter="tipo" data-value="Tomada de Subsídio">TS</button>
+      </div>
+
+      <div class="filter-chips">
+        <span class="filter-label">Ano:</span>
+        <button class="chip chip-active" data-filter="ano" data-value="">Todos</button>
+        {% for a in anos[:5] %}
+        <button class="chip" data-filter="ano" data-value="{{ a }}">{{ a }}</button>
+        {% endfor %}
+      </div>
+
+      <div class="filter-chips">
+        <span class="filter-label">Status:</span>
+        <button class="chip chip-active" data-filter="status" data-value="">Todos</button>
+        <button class="chip" data-filter="status" data-value="Aberta">Abertas</button>
+        <button class="chip" data-filter="status" data-value="Encerrada">Encerradas</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ RESULTADOS AJAX ══════════════ -->
+<div id="searchResults" class="search-results-wrap" hidden>
+  <div class="container">
+    <div class="section-header">
+      <h2>Resultados da busca</h2>
+      <span class="badge" id="searchCount">0</span>
+    </div>
+    <div class="cards-grid" id="searchGrid"></div>
+    <div class="empty-state" id="searchEmpty" hidden>
+      <span class="empty-icon">🔎</span>
+      <p>Nenhum instrumento encontrado com esses critérios.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ CONTEÚDO ESTÁTICO ════════════ -->
+<div id="staticContent">
+
+  <!-- Abertas — Ano Atual -->
+  <section class="content-section" id="sec-abertas-atual">
+    <div class="container">
+      <div class="section-header">
+        <h2>🟢 Abertas — {{ ano_atual }}</h2>
+        <span class="badge badge-open">{{ abertas_atual|length }}</span>
+      </div>
+      {% if abertas_atual %}
+        <div class="cards-grid">
+          {% for c in abertas_atual %}{{ card(c) }}{% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <span class="empty-icon">📭</span>
+          <p>Nenhum instrumento aberto em {{ ano_atual }} até o momento.</p>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Abertas — Ano Anterior -->
+  <section class="content-section" id="sec-abertas-anterior">
+    <div class="container">
+      <div class="section-header">
+        <h2>🟡 Abertas — {{ ano_anterior }}</h2>
+        <span class="badge badge-open-prev">{{ abertas_anterior|length }}</span>
+      </div>
+      {% if abertas_anterior %}
+        <div class="cards-grid">
+          {% for c in abertas_anterior %}{{ card(c) }}{% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <span class="empty-icon">📭</span>
+          <p>Nenhum instrumento aberto em {{ ano_anterior }}.</p>
+        </div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- Encerradas -->
+  <section class="content-section" id="sec-encerradas">
+    <div class="container">
+      <div class="section-header collapsible" data-target="encerradasGrid">
+        <h2>📁 Encerradas</h2>
+        <span class="badge badge-closed">{{ encerradas|length }}</span>
+        <span class="collapse-arrow" id="encerradasArrow">▾</span>
+      </div>
+      <div id="encerradasGrid">
+        {% if encerradas %}
+          <div class="cards-grid">
+            {% for c in encerradas %}{{ card(c) }}{% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state">
+            <span class="empty-icon">📭</span>
+            <p>Nenhum instrumento encerrado registrado.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+</div><!-- /#staticContent -->
+
+<!-- ═══════════════════════ GRÁFICOS ═════════════════════ -->
+<section class="charts-section" id="charts">
+  <div class="container">
+    <div class="section-header">
+      <h2>📊 Análise</h2>
+    </div>
+    <div class="charts-grid">
+
+      <div class="chart-card">
+        <h3 class="chart-title">Distribuição por Tipo</h3>
+        <div class="chart-wrap">
+          <canvas id="chartTipo"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <h3 class="chart-title">Consultas por Ano</h3>
+        <div class="chart-wrap">
+          <canvas id="chartAno"></canvas>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <h3 class="chart-title">Status Geral</h3>
+        <div class="chart-wrap">
+          <canvas id="chartStatus"></canvas>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ FOOTER ═══════════════════════ -->
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <p>
+      Dados coletados do
+      <a href="https://apps.anatel.gov.br/ParticipaAnatel/Home.aspx" target="_blank" rel="noopener">Participa Anatel</a>
+      e do
+      <a href="https://sistemas.anatel.gov.br/SACP/Contribuicoes/ListaConsultasContribuicoes.asp?Tipo=1&Opcao=andamento" target="_blank" rel="noopener">SACP</a>.
+    </p>
+    <p class="footer-note">Robô de monitoramento — atualização diária às {{ '08:00' }}</p>
+  </div>
+</footer>
+
+<!-- ═══════════════════════ MODAL DETALHE ════════════════ -->
+<div class="modal-overlay" id="modalOverlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <button class="modal-close" id="modalClose" aria-label="Fechar">✕</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════ MACRO CARD ═══════════════════ -->
+{% macro card(c, highlight=False) %}
+{% set prazo = c.prazo_resposta or c.data_encerramento %}
+{% set aberta = c.status == 'Aberta' %}
+{% set tipo_curto = 'CP' if 'Pública' in c.tipo else 'TS' %}
+{% set dias = c.dias_restantes %}
+
+<article
+  class="card {% if highlight %}card-urgent{% elif aberta %}card-open{% else %}card-closed{% endif %}"
+  data-codigo="{{ c.codigo }}"
+  data-tipo="{{ c.tipo }}"
+  data-status="{{ c.status }}"
+  data-titulo="{{ c.titulo }}"
+  data-objeto="{{ c.objeto }}"
+  data-descricao="{{ c.descricao }}"
+  data-questionamentos="{{ c.questionamentos }}"
+  data-prazo="{{ prazo or '' }}"
+  data-link="{{ c.link }}"
+  data-abertura="{{ c.data_abertura or '' }}"
+  data-contribuicoes="{{ c.numero_contribuicoes }}"
+  data-adiada="{{ 'true' if c.adiada else 'false' }}"
+>
+  <div class="card-header">
+    <div class="card-badges">
+      <span class="badge-tipo badge-tipo-{{ tipo_curto.lower() }}" title="{{ c.tipo }}">{{ tipo_curto }}</span>
+      {% if c.adiada %}<span class="badge-tag badge-postponed">🔄 Adiada</span>{% endif %}
+      {% if highlight %}<span class="badge-tag badge-urgent-sm">🔥 Urgente</span>{% endif %}
+    </div>
+    <span class="status-dot status-{{ 'open' if aberta else 'closed' }}" title="{{ c.status }}">
+      {{ '● Aberta' if aberta else '● Encerrada' }}
+    </span>
+  </div>
+
+  <div class="card-body">
+    <h3 class="card-title">{{ c.titulo }}</h3>
+    {% if c.objeto and c.objeto != c.titulo %}
+      <p class="card-objeto">{{ c.objeto[:120] }}{% if c.objeto|length > 120 %}…{% endif %}</p>
+    {% endif %}
+  </div>
+
+  <div class="card-footer">
+    <div class="card-meta">
+      {% if prazo %}
+        <span class="meta-item">
+          📅
+          {% set prazo_fmt = prazo[8:10] + '/' + prazo[5:7] + '/' + prazo[:4] %}
+          <strong>{{ prazo_fmt }}</strong>
+        </span>
+        {% if aberta and dias is not none %}
+          {% if dias < 0 %}
+            <span class="meta-item tag-overdue">Vencida</span>
+          {% elif dias == 0 %}
+            <span class="meta-item tag-today">Hoje!</span>
+          {% elif dias <= 7 %}
+            <span class="meta-item tag-critical">{{ dias }}d</span>
+          {% elif dias <= 15 %}
+            <span class="meta-item tag-warning">{{ dias }} dias</span>
+          {% else %}
+            <span class="meta-item tag-ok">{{ dias }} dias</span>
+          {% endif %}
+        {% endif %}
+      {% else %}
+        <span class="meta-item meta-muted">📅 Prazo não informado</span>
+      {% endif %}
+
+      {% if c.numero_contribuicoes > 0 %}
+        <span class="meta-item">💬 {{ c.numero_contribuicoes }}</span>
+      {% endif %}
+    </div>
+
+    <div class="card-actions">
+      <button class="btn btn-ghost btn-sm" onclick="abrirDetalhe(this.closest('.card'))">
+        Ver mais
+      </button>
+      {% if c.link %}
+        <a href="{{ c.link }}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">
+          Participar →
+        </a>
+      {% endif %}
+    </div>
+  </div>
+</article>
+{% endmacro %}
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
